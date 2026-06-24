@@ -1,0 +1,50 @@
+<!--
+  Score-based navigation Behavior Tree for the Storagy Nav2 experiment.
+
+  This tree is based on the Nav2 Humble replanning/recovery pattern:
+  - replan periodically while moving
+  - clear the relevant costmap when planning or control fails
+  - run recovery actions when the path stays blocked
+
+  Copy this file into the Storagy package and set bt_navigator's
+  default_nav_to_pose_bt_xml parameter to the copied absolute path.
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="8" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithScoreReplanning">
+        <RateController hz="2.0">
+          <RecoveryNode number_of_retries="2" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            <ClearEntireCostmap name="ClearGlobalCostmapAfterPlanFail"
+                                service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+
+        <RecoveryNode number_of_retries="2" name="FollowPathWithLocalRecovery">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <Sequence name="LocalBlockedPathRecovery">
+            <ClearEntireCostmap name="ClearLocalCostmapAfterControlFail"
+                                service_name="local_costmap/clear_entirely_local_costmap"/>
+            <Wait wait_duration="1.0"/>
+          </Sequence>
+        </RecoveryNode>
+      </PipelineSequence>
+
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="CostmapClearing">
+            <ClearEntireCostmap name="ClearLocalCostmap"
+                                service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap"
+                                service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <BackUp backup_dist="0.30" backup_speed="0.05"/>
+          <Spin spin_dist="1.57"/>
+          <Wait wait_duration="3.0"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>
