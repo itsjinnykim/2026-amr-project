@@ -254,3 +254,75 @@ Add a Behavior Tree change after parameter tuning if:
 
 Until those cases are observed, costmap plus DWB scoring is the fastest useful
 improvement path.
+
+## 11. Score Monitor And Before/After Comparison
+
+Copy these files into the Storagy workspace or run them directly from this repo:
+
+- `scripts/nav2_score_monitor.py`
+- `scripts/compare_nav2_score_runs.py`
+- `behavior_trees/score_replanning_recovery.xml`
+
+For the Docker practice repo, copy them under the mounted `src` tree:
+
+```bash
+cd /path/to/storagy-practice-ws-docker
+/mnt/c/Users/jin/Desktop/2026-amr-project/scripts/install_score_tools_to_storagy.sh "$PWD"
+```
+
+Manual copy version:
+
+```bash
+mkdir -p src/storagy/scripts src/storagy/behavior_trees src/storagy/param
+cp /mnt/c/Users/jin/Desktop/2026-amr-project/config/nav2_params_dwb_safe.yaml \
+  src/storagy/param/
+cp /mnt/c/Users/jin/Desktop/2026-amr-project/scripts/nav2_score_monitor.py \
+  src/storagy/scripts/
+cp /mnt/c/Users/jin/Desktop/2026-amr-project/scripts/compare_nav2_score_runs.py \
+  src/storagy/scripts/
+cp /mnt/c/Users/jin/Desktop/2026-amr-project/behavior_trees/score_replanning_recovery.xml \
+  src/storagy/behavior_trees/
+```
+
+Baseline run:
+
+```bash
+ros2 launch storagy navigation.launch.py
+python3 /mnt/c/Users/jin/Desktop/2026-amr-project/scripts/nav2_score_monitor.py \
+  --ros-args -p csv_path:=/tmp/nav2_baseline.csv
+```
+
+Inside the Docker noVNC terminal, use:
+
+```bash
+python3 /opt/storagy-practice-ws-docker/src/storagy/scripts/nav2_score_monitor.py \
+  --ros-args -p csv_path:=/tmp/nav2_baseline.csv
+```
+
+Tuned run:
+
+```bash
+ros2 launch storagy navigation.launch.py \
+  params_file:=/opt/storagy-practice-ws-docker/src/storagy/param/nav2_params_dwb_safe.yaml
+python3 /mnt/c/Users/jin/Desktop/2026-amr-project/scripts/nav2_score_monitor.py \
+  --ros-args -p csv_path:=/tmp/nav2_tuned.csv
+```
+
+Inside the Docker noVNC terminal, use:
+
+```bash
+python3 /opt/storagy-practice-ws-docker/src/storagy/scripts/nav2_score_monitor.py \
+  --ros-args -p csv_path:=/tmp/nav2_tuned.csv
+```
+
+Use the same RViz start pose and `Nav2 Goal` for both runs. Then compare:
+
+```bash
+python3 /mnt/c/Users/jin/Desktop/2026-amr-project/scripts/compare_nav2_score_runs.py \
+  --baseline /tmp/nav2_baseline.csv \
+  --tuned /tmp/nav2_tuned.csv
+```
+
+The comparison reports score, path length, minimum obstacle distance, total
+rotation, blocked samples, inflated costmap cells, high-cost cells, and mean
+costmap cost.

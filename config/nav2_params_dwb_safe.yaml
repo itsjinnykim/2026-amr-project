@@ -42,6 +42,9 @@ amcl:
 bt_navigator:
   ros__parameters:
     bt_loop_duration: 10
+    # To enable the custom blocked-path/recovery tree, copy
+    # behavior_trees/score_replanning_recovery.xml into the Storagy package and
+    # set default_nav_to_pose_bt_xml to its absolute path.
     default_server_timeout: 20
     enable_groot_monitoring: true
     global_frame: map
@@ -103,7 +106,7 @@ controller_server:
     progress_checker:
       plugin: nav2_controller::SimpleProgressChecker
       required_movement_radius: 0.5
-      movement_time_allowance: 10.0
+      movement_time_allowance: 6.0
 
     general_goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
