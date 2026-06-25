@@ -16,8 +16,9 @@ checks in this repo.
 | Path length score | `scripts/nav2_score_monitor.py` computes path length from `/plan`. |
 | Obstacle distance score | `scripts/nav2_score_monitor.py` estimates nearest obstacle from `/local_costmap/costmap`. |
 | Rotation score | `scripts/nav2_score_monitor.py` integrates absolute `/cmd_vel.angular.z`. |
+| Energy efficiency estimate | `scripts/nav2_score_monitor.py` estimates energy cost from velocity changes, acceleration changes, stops, and restarts. |
 | DWB critic weights | `FollowPath` critic weights in `config/nav2_params_dwb_safe.yaml`. |
-| Smooth driving | Lower velocity/accel limits plus velocity smoother settings. |
+| Smooth driving | Lower velocity/accel limits plus velocity smoother settings reduce sharp starts, stops, and turns. |
 | Blocked path detection | Progress checker plus score monitor blocked-state detection. |
 | Replan | Nav2 BT periodic replanning; custom BT in `behavior_trees/score_replanning_recovery.xml`. |
 | Recovery improvement | Custom BT clear-costmap, wait, backup, spin recovery order. |
@@ -32,10 +33,21 @@ score =
   + time_weight * elapsed_time_s
   + rotation_weight * accumulated_abs_rotation_rad
   + safety_weight * max(0, safety_distance_m - nearest_obstacle_m)
+  + energy_weight * estimated_energy_cost
   + blocked_weight if blocked
 ```
 
 Lower score is better.
+
+Energy cost is an estimate, not a direct battery reading:
+
+```text
+estimated_energy_cost =
+  velocity_change_weight * accumulated_velocity_change
+  + acceleration_change_weight * accumulated_acceleration_change
+  + stop_weight * stop_count
+  + restart_weight * restart_count
+```
 
 Default meaning:
 
@@ -43,6 +55,8 @@ Default meaning:
 - Shorter running time is better.
 - Less accumulated turning is better.
 - Larger obstacle clearance is better.
+- Fewer speed changes, acceleration changes, stops, and restarts are better
+  for estimated battery efficiency.
 - Blocked-path behavior is penalized.
 
 ## Baseline vs Tuned Test
@@ -89,6 +103,11 @@ python3 /opt/storagy-practice-ws-docker/src/storagy/scripts/compare_nav2_score_r
   --baseline /tmp/nav2_baseline.csv \
   --tuned /tmp/nav2_tuned.csv
 ```
+
+The comparison reports score, path length, minimum obstacle distance, total
+rotation, estimated energy cost, velocity/acceleration change, stop/restart
+counts, blocked samples, inflated costmap cells, high-cost cells, and mean
+costmap cost.
 
 ## How To Enable The Custom BT
 

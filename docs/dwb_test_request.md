@@ -104,6 +104,10 @@ Record these for both baseline and tuned runs:
 - Number of replans
 - Maximum angular velocity
 - Visible oscillation count
+- Estimated energy cost
+- Accumulated velocity change
+- Accumulated acceleration change
+- Stop/restart count
 
 ## Result Template
 
@@ -116,6 +120,10 @@ Time to goal:
 Minimum clearance:
 Recoveries:
 Replans:
+Energy score:
+Velocity change:
+Acceleration change:
+Stops/restarts:
 Observed issue:
 Next tuning change:
 ```
