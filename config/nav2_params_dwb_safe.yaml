@@ -127,23 +127,23 @@ controller_server:
       max_angular_accel: 3.0
       simulate_ahead_time: 3.0
 
-      # DWB motion sampling. This is intentionally safer than the original
-      # 0.6 m/s profile for first score-based tests.
+      # DWB motion sampling. This is intentionally safer and smoother than the
+      # original 0.6 m/s profile for first score/energy-based tests.
       debug_trajectory_details: true
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.4
+      max_vel_x: 0.3
       max_vel_y: 0.0
       max_vel_theta: 0.8
       min_speed_xy: 0.0
-      max_speed_xy: 0.4
+      max_speed_xy: 0.3
       min_speed_theta: 0.0
-      acc_lim_x: 1.2
+      acc_lim_x: 0.8
       acc_lim_y: 0.0
-      acc_lim_theta: 1.0
-      decel_lim_x: -1.5
+      acc_lim_theta: 0.8
+      decel_lim_x: -1.0
       decel_lim_y: 0.0
-      decel_lim_theta: -2.0
+      decel_lim_theta: -1.2
       vx_samples: 20
       vy_samples: 1
       vtheta_samples: 32
@@ -191,19 +191,19 @@ controller_server:
       primary_controller: nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
       allow_reversing: false
       angular_dist_threshold: 0.785
-      desired_linear_vel: 0.45
+      desired_linear_vel: 0.35
       forward_sampling_distance: 0.5
       lookahead_dist: 0.6
       lookahead_time: 1.5
       max_allowed_time_to_collision_up_to_carrot: 1.0
-      max_angular_accel: 2.0
+      max_angular_accel: 1.6
       max_lookahead_dist: 1.5
       max_robot_pose_search_dist: 10.0
       min_approach_linear_velocity: 0.05
       min_lookahead_dist: 0.3
       regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.20
-      rotate_to_heading_angular_vel: 0.8
+      rotate_to_heading_angular_vel: 0.7
       rotate_to_heading_min_angle: 0.785
       simulate_ahead_time: 3.0
       transform_tolerance: 0.3
@@ -343,10 +343,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: OPEN_LOOP
-    max_velocity: [0.4, 0.0, 0.8]
+    max_velocity: [0.3, 0.0, 0.8]
     min_velocity: [0.0, 0.0, -0.8]
-    max_accel: [1.2, 0.0, 1.0]
-    max_decel: [-1.5, 0.0, -2.0]
+    max_accel: [0.8, 0.0, 0.8]
+    max_decel: [-1.0, 0.0, -1.2]
     odom_topic: odom
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]

@@ -10,6 +10,8 @@ Improve navigation without writing a custom plugin first:
 - Give obstacles a wider safety score through costmap inflation.
 - Make the global planner prefer lower-risk cells.
 - Make the DWB local planner prefer safer, smoother commands.
+- Estimate battery efficiency from distance, rotation, velocity changes,
+  acceleration changes, stops, and restarts.
 - Keep the original Docker practice flow:
   `ros2 launch storagy navigation.launch.py`.
 
@@ -109,6 +111,8 @@ Known Docker practice target:
 Other possible native targets:
 
 - `src/storagy/launch/bringup.launch.py`
+- `src/storagy/launch/navigation2/navigation2.launch.py`
+- `src/storagy/param/navigation2/storagy.yaml`
 - `install/storagy/share/storagy/config/*.yaml`
 - `install/storagy/share/storagy/param/*.yaml`
 
@@ -121,7 +125,7 @@ From WSL, before SSH-ing into the robot:
 
 ```bash
 scp /mnt/c/Users/jin/Desktop/2026-amr-project/config/nav2_params_dwb_safe.yaml \
-  storagy@<ROBOT_IP>:/home/storagy/Desktop/storagy_ws/src/storagy/param/
+  storagy@<ROBOT_IP>:/home/storagy/Desktop/storagy_ws/src/storagy/param/navigation2/
 ```
 
 If working directly on the native Ubuntu machine, copy the file with a USB
@@ -133,8 +137,8 @@ On the robot:
 
 ```bash
 cd ~/Desktop/storagy_ws
-cp src/storagy/param/nav2_params.yaml \
-  src/storagy/param/nav2_params.yaml.bak.$(date +%Y%m%d_%H%M%S)
+cp src/storagy/param/navigation2/storagy.yaml \
+  src/storagy/param/navigation2/storagy.yaml.bak.$(date +%Y%m%d_%H%M%S)
 ```
 
 Do not skip this. The tuned profile is intentionally more conservative and may
@@ -147,9 +151,9 @@ Use one of these paths.
 Path A: launch file supports `params_file`.
 
 ```bash
-ros2 launch storagy navigation.launch.py \
+ros2 launch storagy bringup.launch.py \
   map:=/home/storagy/maps/1206_new_map.yaml \
-  params_file:=/home/storagy/Desktop/storagy_ws/src/storagy/param/nav2_params_dwb_safe.yaml
+  params_file:=/home/storagy/Desktop/storagy_ws/src/storagy/param/navigation2/nav2_params_dwb_safe.yaml
 ```
 
 Path B: launch file does not support `params_file`.
@@ -162,6 +166,7 @@ parameter file:
 - `local_costmap`
 - `global_costmap`
 - `velocity_smoother`
+- `bt_navigator`
 
 Keep original robot-specific values if they exist:
 
@@ -185,6 +190,7 @@ After bringup:
 ```bash
 ros2 param get /controller_server FollowPath.BaseObstacle.scale
 ros2 param get /controller_server FollowPath.PathDist.scale
+ros2 param get /planner_server GridBased.plugin
 ros2 param get /global_costmap/global_costmap inflation_layer.inflation_radius
 ros2 param get /local_costmap/local_costmap inflation_layer.inflation_radius
 ```
@@ -209,6 +215,7 @@ Watch:
 - `/plan`
 - `/local_plan`
 - `/cmd_vel`
+- `/nav2_score_report`
 
 ## 9. First Tuning Moves
 
@@ -235,6 +242,15 @@ Too much spinning:
 RotateToGoal.scale +4.0
 Twirling.scale +2.0
 max_vel_theta -0.05
+```
+
+Estimated energy cost too high:
+
+```text
+max_vel_x -0.02
+acc_lim_x -0.1
+decel_lim_x magnitude -0.1
+Twirling.scale +1.0 if repeated turning is visible
 ```
 
 Too slow:
@@ -324,5 +340,6 @@ python3 /mnt/c/Users/jin/Desktop/2026-amr-project/scripts/compare_nav2_score_run
 ```
 
 The comparison reports score, path length, minimum obstacle distance, total
-rotation, blocked samples, inflated costmap cells, high-cost cells, and mean
+rotation, estimated energy cost, velocity/acceleration change, stop/restart
+counts, blocked samples, inflated costmap cells, high-cost cells, and mean
 costmap cost.

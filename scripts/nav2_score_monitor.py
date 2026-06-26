@@ -7,6 +7,7 @@ Subscribes to common Nav2 topics and prints/publishes a compact score:
         + beta  * elapsed_time
         + gamma * accumulated_abs_rotation
         + delta * safety_penalty
+        + energy_weight * estimated_energy_cost
         + blocked_penalty
 
 The node is intentionally lightweight and uses only standard ROS 2 messages.
@@ -36,9 +37,18 @@ class ScoreState:
     high_cost_cells: int = 0
     mean_cost: float = 0.0
     accumulated_rotation_rad: float = 0.0
+    accumulated_velocity_change: float = 0.0
+    accumulated_acceleration_change: float = 0.0
+    stop_count: int = 0
+    restart_count: int = 0
     last_cmd_time_s: Optional[float] = None
     last_report_time_s: Optional[float] = None
     low_motion_start_s: Optional[float] = None
+    last_linear_x: Optional[float] = None
+    last_angular_z: Optional[float] = None
+    last_linear_accel: Optional[float] = None
+    last_angular_accel: Optional[float] = None
+    was_low_motion: Optional[bool] = None
     blocked: bool = False
 
 
@@ -56,7 +66,12 @@ class Nav2ScoreMonitor(Node):
         self.declare_parameter("time_weight", 0.05)
         self.declare_parameter("rotation_weight", 0.5)
         self.declare_parameter("safety_weight", 4.0)
+        self.declare_parameter("energy_weight", 0.8)
         self.declare_parameter("blocked_weight", 8.0)
+        self.declare_parameter("velocity_change_weight", 1.0)
+        self.declare_parameter("acceleration_change_weight", 0.2)
+        self.declare_parameter("stop_weight", 1.0)
+        self.declare_parameter("restart_weight", 1.0)
 
         self.declare_parameter("safety_distance_m", 0.70)
         self.declare_parameter("blocked_obstacle_distance_m", 0.45)
@@ -105,6 +120,11 @@ class Nav2ScoreMonitor(Node):
                     "high_cost_cells",
                     "mean_cost",
                     "accumulated_rotation_rad",
+                    "accumulated_velocity_change",
+                    "accumulated_acceleration_change",
+                    "stop_count",
+                    "restart_count",
+                    "estimated_energy_cost",
                     "safety_penalty",
                     "blocked",
                     "linear_x",
@@ -137,8 +157,13 @@ class Nav2ScoreMonitor(Node):
         if self.state.last_cmd_time_s is not None:
             dt = max(0.0, now - self.state.last_cmd_time_s)
             self.state.accumulated_rotation_rad += abs(msg.angular.z) * dt
+            self._update_energy_motion(msg, dt)
+        else:
+            self._update_low_motion_transition(msg)
 
         self.state.last_cmd_time_s = now
+        self.state.last_linear_x = msg.linear.x
+        self.state.last_angular_z = msg.angular.z
         self.last_twist = msg
         self._update_blocked_state(now, msg)
 
@@ -206,6 +231,54 @@ class Nav2ScoreMonitor(Node):
             self.state.low_motion_start_s = None
             self.state.blocked = False
 
+    def _update_energy_motion(self, msg: Twist, dt: float) -> None:
+        if dt <= 0.0:
+            self._update_low_motion_transition(msg)
+            return
+
+        last_linear = self.state.last_linear_x
+        last_angular = self.state.last_angular_z
+        if last_linear is None or last_angular is None:
+            self._update_low_motion_transition(msg)
+            return
+
+        linear_delta = msg.linear.x - last_linear
+        angular_delta = msg.angular.z - last_angular
+        self.state.accumulated_velocity_change += (
+            abs(linear_delta) + abs(angular_delta)
+        )
+
+        linear_accel = linear_delta / dt
+        angular_accel = angular_delta / dt
+        if self.state.last_linear_accel is not None:
+            self.state.accumulated_acceleration_change += abs(
+                linear_accel - self.state.last_linear_accel
+            )
+        if self.state.last_angular_accel is not None:
+            self.state.accumulated_acceleration_change += abs(
+                angular_accel - self.state.last_angular_accel
+            )
+        self.state.last_linear_accel = linear_accel
+        self.state.last_angular_accel = angular_accel
+        self._update_low_motion_transition(msg)
+
+    def _update_low_motion_transition(self, msg: Twist) -> None:
+        low_motion = self._is_low_motion(msg)
+        was_low_motion = self.state.was_low_motion
+        if was_low_motion is False and low_motion:
+            self.state.stop_count += 1
+        elif was_low_motion is True and not low_motion:
+            self.state.restart_count += 1
+        self.state.was_low_motion = low_motion
+
+    def _is_low_motion(self, msg: Twist) -> bool:
+        linear_threshold = float(self.get_parameter("linear_motion_threshold").value)
+        angular_threshold = float(self.get_parameter("angular_motion_threshold").value)
+        return (
+            abs(msg.linear.x) < linear_threshold
+            and abs(msg.angular.z) < angular_threshold
+        )
+
     def _safety_penalty(self) -> float:
         safety_distance = float(self.get_parameter("safety_distance_m").value)
         nearest = self.state.nearest_obstacle_m
@@ -213,28 +286,45 @@ class Nav2ScoreMonitor(Node):
             return 0.0
         return max(0.0, safety_distance - nearest)
 
+    def _energy_cost(self) -> float:
+        velocity_weight = float(self.get_parameter("velocity_change_weight").value)
+        accel_weight = float(self.get_parameter("acceleration_change_weight").value)
+        stop_weight = float(self.get_parameter("stop_weight").value)
+        restart_weight = float(self.get_parameter("restart_weight").value)
+        return (
+            velocity_weight * self.state.accumulated_velocity_change
+            + accel_weight * self.state.accumulated_acceleration_change
+            + stop_weight * self.state.stop_count
+            + restart_weight * self.state.restart_count
+        )
+
     def _score(self, elapsed_s: float) -> float:
         alpha = float(self.get_parameter("distance_weight").value)
         beta = float(self.get_parameter("time_weight").value)
         gamma = float(self.get_parameter("rotation_weight").value)
         delta = float(self.get_parameter("safety_weight").value)
+        energy_weight = float(self.get_parameter("energy_weight").value)
         blocked_weight = float(self.get_parameter("blocked_weight").value)
         return (
             alpha * self.state.path_length_m
             + beta * elapsed_s
             + gamma * self.state.accumulated_rotation_rad
             + delta * self._safety_penalty()
+            + energy_weight * self._energy_cost()
             + (blocked_weight if self.state.blocked else 0.0)
         )
 
     def _report(self) -> None:
         elapsed = self._now_s() - self.start_time_s
         score = self._score(elapsed)
+        energy_cost = self._energy_cost()
         nearest = self.state.nearest_obstacle_m
         nearest_text = "none" if nearest is None else f"{nearest:.2f}"
         line = (
             f"score={score:.3f}, path={self.state.path_length_m:.2f}m, "
             f"obstacle={nearest_text}m, rotation={self.state.accumulated_rotation_rad:.2f}rad, "
+            f"energy={energy_cost:.2f}, stops={self.state.stop_count}, "
+            f"restarts={self.state.restart_count}, "
             f"safety_penalty={self._safety_penalty():.2f}, "
             f"inflated={self.state.inflated_cells}, high_cost={self.state.high_cost_cells}, "
             f"blocked={self.state.blocked}"
@@ -253,6 +343,11 @@ class Nav2ScoreMonitor(Node):
                     "high_cost_cells": self.state.high_cost_cells,
                     "mean_cost": f"{self.state.mean_cost:.6f}",
                     "accumulated_rotation_rad": f"{self.state.accumulated_rotation_rad:.6f}",
+                    "accumulated_velocity_change": f"{self.state.accumulated_velocity_change:.6f}",
+                    "accumulated_acceleration_change": f"{self.state.accumulated_acceleration_change:.6f}",
+                    "stop_count": self.state.stop_count,
+                    "restart_count": self.state.restart_count,
+                    "estimated_energy_cost": f"{energy_cost:.6f}",
                     "safety_penalty": f"{self._safety_penalty():.6f}",
                     "blocked": str(self.state.blocked).lower(),
                     "linear_x": f"{self.last_twist.linear.x:.6f}",
