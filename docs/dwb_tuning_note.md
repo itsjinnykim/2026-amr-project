@@ -10,6 +10,8 @@ writing a new planner:
   weighted critics.
 - Smoothness score: the velocity smoother limits acceleration and sudden
   angular changes.
+- Energy estimate: the score monitor treats repeated speed changes,
+  acceleration changes, stops, and restarts as indirect battery-use signals.
 
 ## Implemented Profile
 
@@ -38,6 +40,9 @@ The profile is safety-first:
   the common TurtleBot3 baseline.
 - Forward and low-turn behavior is encouraged through `PreferForward`,
   `Twirling`, reduced angular velocity, and gentler acceleration limits.
+- Battery efficiency is handled as an estimate rather than a direct sensor
+  reading. The profile limits speed and acceleration to reduce sudden starts,
+  stops, and turns.
 - The local costmap frame is changed to `odom`, which is the usual Nav2 choice
   for a rolling local costmap.
 
@@ -46,14 +51,17 @@ The profile is safety-first:
 The PDF's score formula can be mapped onto existing Nav2 parameters like this:
 
 ```text
-Score = a * Distance + b * Time + c * Energy + d * Safety
+Score = a * Distance + b * Time + c * Rotation + d * Safety + e * Energy
 ```
 
 - Distance: `PathDist`, `GoalDist`, `PathAlign`, `GoalAlign`
 - Time: `max_vel_x`, `sim_time`, controller frequency, planner frequency
-- Energy: `acc_lim_x`, `acc_lim_theta`, `velocity_smoother`, `Twirling`
+- Rotation: `RotateToGoal`, `Twirling`, `max_vel_theta`
 - Safety: costmap inflation, `BaseObstacle`, `ObstacleFootprint`,
   `cost_travel_multiplier`
+- Energy: `acc_lim_x`, `acc_lim_theta`, `decel_lim_x`, `velocity_smoother`,
+  plus monitor metrics for velocity change, acceleration change, stops, and
+  restarts
 
 This is not a literal custom score function yet. It is a practical first
 implementation using Nav2's built-in scoring hooks.
@@ -79,6 +87,16 @@ When the robot oscillates or spins too much:
 - Increase `Twirling.scale` by `2.0`.
 - Decrease `max_vel_theta` by `0.05`.
 - Decrease `acc_lim_theta` by `0.2`.
+
+When the estimated energy cost is high:
+
+- Decrease `max_vel_x` by `0.02`.
+- Decrease `acc_lim_x` by `0.1`.
+- Decrease `decel_lim_x` magnitude by `0.1`.
+- Increase `Twirling.scale` by `1.0` if repeated turning is visible.
+- Check `stop_count` and `restart_count`; frequent stop-start behavior usually
+  means the local costmap, obstacle inflation, or path alignment terms are too
+  aggressive.
 
 When the robot is too slow:
 

@@ -22,6 +22,11 @@ class RunSummary:
     mean_high_cost_cells: float
     mean_cost: float
     final_rotation_rad: float
+    final_energy_cost: float
+    final_velocity_change: float
+    final_acceleration_change: float
+    stop_count: int
+    restart_count: int
     blocked_samples: int
 
 
@@ -61,6 +66,15 @@ def summarize(name: str, path: str) -> RunSummary:
         mean_high_cost_cells=mean(high_cost_cells),
         mean_cost=mean(mean_costs),
         final_rotation_rad=float(last["accumulated_rotation_rad"]),
+        final_energy_cost=float(last.get("estimated_energy_cost", 0.0) or 0.0),
+        final_velocity_change=float(
+            last.get("accumulated_velocity_change", 0.0) or 0.0
+        ),
+        final_acceleration_change=float(
+            last.get("accumulated_acceleration_change", 0.0) or 0.0
+        ),
+        stop_count=int(last.get("stop_count", 0) or 0),
+        restart_count=int(last.get("restart_count", 0) or 0),
         blocked_samples=blocked_samples,
     )
 
@@ -80,6 +94,11 @@ def print_summary(summary: RunSummary) -> None:
     print(f"  mean_high_cost_cells: {summary.mean_high_cost_cells:.1f}")
     print(f"  mean_cost: {summary.mean_cost:.3f}")
     print(f"  final_rotation_rad: {summary.final_rotation_rad:.3f}")
+    print(f"  final_energy_cost: {summary.final_energy_cost:.3f}")
+    print(f"  final_velocity_change: {summary.final_velocity_change:.3f}")
+    print(f"  final_acceleration_change: {summary.final_acceleration_change:.3f}")
+    print(f"  stop_count: {summary.stop_count}")
+    print(f"  restart_count: {summary.restart_count}")
     print(f"  blocked_samples: {summary.blocked_samples}")
 
 
@@ -88,6 +107,11 @@ def delta(tuned: RunSummary, baseline: RunSummary) -> Iterable[str]:
     yield f"score_delta(mean): {tuned.mean_score - baseline.mean_score:+.3f}"
     yield f"path_delta_m(final): {tuned.final_path_m - baseline.final_path_m:+.3f}"
     yield f"rotation_delta_rad(final): {tuned.final_rotation_rad - baseline.final_rotation_rad:+.3f}"
+    yield f"energy_delta(final): {tuned.final_energy_cost - baseline.final_energy_cost:+.3f}"
+    yield f"velocity_change_delta(final): {tuned.final_velocity_change - baseline.final_velocity_change:+.3f}"
+    yield f"acceleration_change_delta(final): {tuned.final_acceleration_change - baseline.final_acceleration_change:+.3f}"
+    yield f"stop_delta_count: {tuned.stop_count - baseline.stop_count:+d}"
+    yield f"restart_delta_count: {tuned.restart_count - baseline.restart_count:+d}"
     yield f"blocked_delta_samples: {tuned.blocked_samples - baseline.blocked_samples:+d}"
     yield f"mean_inflated_cells_delta: {tuned.mean_inflated_cells - baseline.mean_inflated_cells:+.1f}"
     yield f"mean_high_cost_cells_delta: {tuned.mean_high_cost_cells - baseline.mean_high_cost_cells:+.1f}"
